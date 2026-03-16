@@ -8,8 +8,8 @@ const express    = require('express');
 const cors       = require('cors');
 const http       = require('http');
 const { getAuthUrl, getAccessToken } = require('./services/upstoxAuth');
-const marketRoutes                   = require('./routes/market');
-const sentimentRoutes                = require('./routes/sentiment');
+const marketRoutes = require('./routes/market');
+const sentimentRoutes = require('./routes/sentiment');
 const { setupWebSocketProxy }        = require('./services/wsProxy');
 
 const app    = express();
