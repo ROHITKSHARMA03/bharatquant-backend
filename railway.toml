@@ -1,0 +1,11 @@
+# railway.toml — Railway deployment config for BharatQuant backend
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "node src/server.js"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+[[services]]
+name = "bharatquant-api"
