@@ -274,14 +274,27 @@ router.get('/indices', withAuth, (req, res) => {
     }
 
     try {
-      // Upstox ltp response: { data: { "NSE_INDEX|Nifty 50": { last_price, ... } } }
+      // Upstox ltp response — key format varies: "NSE_INDEX|Nifty 50" or "NSE_INDEX:Nifty 50"
       const raw = data?.data || data || {};
+
+      // Build a lookup that works for both | and : separator formats
+      const findEntry = (key) => {
+        if (raw[key]) return raw[key];
+        // Try colon format: "NSE_INDEX|Nifty 50" → "NSE_INDEX:Nifty 50"
+        const colonKey = key.replace('|', ':');
+        if (raw[colonKey]) return raw[colonKey];
+        // Try matching by partial name
+        const name = key.split('|')[1];
+        const found = Object.keys(raw).find(k => k.includes(name));
+        return found ? raw[found] : {};
+      };
 
       // Normalize into array for easy frontend consumption
       const normalized = instrumentKeys.map((key) => {
-        const entry     = raw[key] || {};
-        const ltp       = entry.last_price || 0;
-        const close     = entry.ohlc?.close || ltp;
+        const entry     = findEntry(key);
+        // Upstox SDK returns lastPrice (camelCase) not last_price
+        const ltp       = entry.lastPrice || entry.last_price || 0;
+        const close     = entry.ohlc?.close || entry.close_price || ltp;
         const change    = parseFloat((ltp - close).toFixed(2));
         const changePct = close > 0
           ? parseFloat(((change / close) * 100).toFixed(2))
