@@ -246,24 +246,63 @@ router.get('/search', withAuth, (req, res) => {
 
 // ─────────────────────────────────────────────────────────
 //  GET /api/market/indices
-//  All major Indian indices in one call
+//  All major Indian indices — normalized for frontend
 // ─────────────────────────────────────────────────────────
 router.get('/indices', withAuth, (req, res) => {
   const apiInstance = new UpstoxClient.MarketQuoteApi();
-  const indices = [
+
+  const instrumentKeys = [
     'NSE_INDEX|Nifty 50',
     'NSE_INDEX|Nifty Bank',
     'NSE_INDEX|Nifty IT',
     'NSE_INDEX|Nifty Midcap 50',
     'BSE_INDEX|SENSEX',
-  ].join(',');
+  ];
 
-  apiInstance.ltp(indices, '2.0', (error, data) => {
+  const labelMap = {
+    'NSE_INDEX|Nifty 50':        'NIFTY 50',
+    'NSE_INDEX|Nifty Bank':      'NIFTY BANK',
+    'NSE_INDEX|Nifty IT':        'NIFTY IT',
+    'NSE_INDEX|Nifty Midcap 50': 'NIFTY MIDCAP',
+    'BSE_INDEX|SENSEX':          'SENSEX',
+  };
+
+  apiInstance.ltp(instrumentKeys.join(','), '2.0', (error, data) => {
     if (error) {
       console.error('Indices error:', error);
       return res.status(500).json({ status: 'error', message: error.message });
     }
-    res.json({ status: 'success', data: data?.data || data });
+
+    try {
+      // Upstox ltp response: { data: { "NSE_INDEX|Nifty 50": { last_price, ... } } }
+      const raw = data?.data || data || {};
+
+      // Normalize into array for easy frontend consumption
+      const normalized = instrumentKeys.map((key) => {
+        const entry     = raw[key] || {};
+        const ltp       = entry.last_price || 0;
+        const close     = entry.ohlc?.close || ltp;
+        const change    = parseFloat((ltp - close).toFixed(2));
+        const changePct = close > 0
+          ? parseFloat(((change / close) * 100).toFixed(2))
+          : 0;
+
+        return {
+          key,
+          name:          labelMap[key] || key.split('|')[1],
+          ltp,
+          close,
+          change,
+          changePercent: changePct,
+          isPositive:    change >= 0,
+        };
+      }).filter(d => d.ltp > 0);
+
+      res.json({ status: 'success', data: normalized, raw });
+    } catch (e) {
+      console.error('Indices normalize error:', e);
+      res.status(500).json({ status: 'error', message: e.message });
+    }
   });
 });
 
