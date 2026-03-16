@@ -9,6 +9,7 @@ const cors       = require('cors');
 const http       = require('http');
 const { getAuthUrl, getAccessToken } = require('./services/upstoxAuth');
 const marketRoutes                   = require('./routes/market');
+const sentimentRoutes                = require('./routes/sentiment');
 const { setupWebSocketProxy }        = require('./services/wsProxy');
 
 const app    = express();
@@ -132,6 +133,7 @@ app.post('/auth/token', (req, res) => {
 //  MARKET DATA ROUTES
 // ─────────────────────────────────────────────────────────
 app.use('/api/market', marketRoutes);
+app.use('/api/sentiment', sentimentRoutes);
 
 // ─────────────────────────────────────────────────────────
 //  ROOT — API Guide
