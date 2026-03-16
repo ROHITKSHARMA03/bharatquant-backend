@@ -294,7 +294,8 @@ router.get('/indices', withAuth, (req, res) => {
         const entry     = findEntry(key);
         // Upstox SDK returns lastPrice (camelCase) not last_price
         const ltp       = entry.lastPrice || entry.last_price || 0;
-        const close     = entry.ohlc?.close || entry.close_price || ltp;
+        const close = entry.ohlc?.close || entry.close_price || 
+              entry.lastClosePrice || entry.last_close_price || ltp;
         const change    = parseFloat((ltp - close).toFixed(2));
         const changePct = close > 0
           ? parseFloat(((change / close) * 100).toFixed(2))
