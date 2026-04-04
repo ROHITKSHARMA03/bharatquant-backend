@@ -1,12 +1,12 @@
 // src/routes/sentiment.js
 // ─────────────────────────────────────────────────────────
-//  AI Market Sentiment powered by Claude AI (Anthropic)
-//  Fetches real Indian market news + asks Claude to score it
+//  AI Market Sentiment powered by Google Gemini AI
+//  Fetches real Indian market news + asks Gemini to score it
 // ─────────────────────────────────────────────────────────
 const express = require('express');
 const router  = express.Router();
 const axios   = require('axios');
-const Anthropic = require('@anthropic-ai/sdk');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 // ── Cache sentiment for 1 hour (avoid repeated API calls) ─
 let sentimentCache = null;
@@ -52,9 +52,17 @@ const fetchHeadlines = async () => {
   return headlines;
 };
 
-// ── Ask Claude to analyze sentiment ──────────────────────
-const analyzeSentimentWithClaude = async (headlines, marketData) => {
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+// ── Ask Gemini to analyze sentiment ──────────────────────
+const analyzeSentimentWithGemini = async (headlines, marketData) => {
+  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  
+  // Using gemini-2.5-flash as it is fast and ideal for text/data analysis
+  const model = genAI.getGenerativeModel({ 
+    model: 'gemini-2.5-flash',
+    generationConfig: {
+      responseMimeType: "application/json", // Enforces strict JSON output
+    }
+  });
 
   const headlineText = headlines.length > 0
     ? headlines.join('\n')
@@ -71,7 +79,7 @@ ${marketContext}
 TODAY'S INDIAN MARKET HEADLINES:
 ${headlineText}
 
-Based on these headlines, provide a JSON response with EXACTLY this structure (no markdown, no explanation, just JSON):
+Based on these headlines, provide a JSON response with EXACTLY this structure:
 {
   "score": <number 0-100, where 0=extreme fear, 50=neutral, 100=extreme greed>,
   "overall": "<Bearish|Slightly Bearish|Neutral|Slightly Bullish|Bullish|Very Bullish>",
@@ -92,24 +100,16 @@ Rules:
 - topBearish: specific negative factors from headlines (max 2)
 - Be realistic and data-driven, not overly optimistic`;
 
-  const response = await client.messages.create({
-    model:      'claude-sonnet-4-20250514',
-    max_tokens: 500,
-    messages:   [{ role: 'user', content: prompt }],
-  });
+  const result = await model.generateContent(prompt);
+  const text = result.response.text().trim();
 
-  const text = response.content[0].text.trim();
-
-  // Parse JSON response
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('Invalid Claude response format');
-
-  return JSON.parse(jsonMatch[0]);
+  // Because we used responseMimeType: "application/json", text is guaranteed to be JSON
+  return JSON.parse(text);
 };
 
 // ─────────────────────────────────────────────────────────
 //  GET /api/sentiment
-//  Returns AI-powered market sentiment using Claude
+//  Returns AI-powered market sentiment using Gemini
 // ─────────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
   // Return cached result if fresh
@@ -122,16 +122,16 @@ router.get('/', async (req, res) => {
     });
   }
 
-  // Check Anthropic API key
-  if (!process.env.ANTHROPIC_API_KEY) {
+  // Check Gemini API key
+  if (!process.env.GEMINI_API_KEY) {
     return res.status(500).json({
       status:  'error',
-      message: 'ANTHROPIC_API_KEY not set in environment variables',
+      message: 'GEMINI_API_KEY not set in environment variables',
     });
   }
 
   try {
-    console.log('🤖 Fetching fresh sentiment from Claude AI...');
+    console.log('🤖 Fetching fresh sentiment from Gemini AI...');
 
     // Step 1: Fetch live news headlines
     const headlines = await fetchHeadlines();
@@ -148,8 +148,8 @@ router.get('/', async (req, res) => {
       }
     } catch (_) {}
 
-    // Step 3: Ask Claude to analyze
-    const sentiment = await analyzeSentimentWithClaude(headlines, marketData);
+    // Step 3: Ask Gemini to analyze
+    const sentiment = await analyzeSentimentWithGemini(headlines, marketData);
     sentiment.headlines = headlines.slice(0, 5); // include top 5 headlines in response
 
     // Cache the result
@@ -163,7 +163,7 @@ router.get('/', async (req, res) => {
   } catch (err) {
     console.error('Sentiment error:', err.message);
 
-    // Return fallback if Claude fails
+    // Return fallback if Gemini fails
     res.status(500).json({
       status:  'error',
       message: err.message,
@@ -174,7 +174,7 @@ router.get('/', async (req, res) => {
         socialScore: 50,
         marketScore: 50,
         topBullish:  ['Market analysis unavailable'],
-        topBearish:  ['Please check API key'],
+        topBearish:  ['Please check API key or quota'],
         summary:     'Live sentiment temporarily unavailable.',
       },
     });
