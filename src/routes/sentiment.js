@@ -7,6 +7,7 @@ const express = require('express');
 const router  = express.Router();
 const axios   = require('axios');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const UpstoxClient = require('upstox-js-sdk');
 
 // ── Cache sentiment for 1 hour (avoid repeated API calls) ─
 let sentimentCache = null;
@@ -180,6 +181,33 @@ router.get('/', async (req, res) => {
     });
   }
 });
+
+const getLiveMarketData = async (token) => {
+  return new Promise((resolve, reject) => {
+    let defaultClient = UpstoxClient.ApiClient.instance;
+    let OAUTH2 = defaultClient.authentications['OAUTH2'];
+    OAUTH2.accessToken = token;
+
+    let apiInstance = new UpstoxClient.MarketQuoteApi();
+    let symbol = "NSE_INDEX|Nifty 50,BSE_INDEX|SENSEX"; // Get both live
+
+    apiInstance.getFullMarketQuote(symbol, (error, data, response) => {
+      if (error) {
+        console.error("Upstox API Error:", error);
+        return resolve(null);
+      }
+      
+      // Extract the real last traded price (LTP)
+      const niftyLtp = data.data['NSE_INDEX:Nifty 50'].last_price;
+      const sensexLtp = data.data['BSE_INDEX:SENSEX'].last_price;
+      
+      resolve({
+        nifty: niftyLtp,
+        sensex: sensexLtp
+      });
+    });
+  });
+};
 
 // Force refresh (bypass cache)
 router.post('/refresh', async (req, res) => {
